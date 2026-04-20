@@ -8,7 +8,17 @@ import {
   Settings2, BarChart3, Plus, Activity, Filter, RefreshCcw, HelpCircle, Edit3, Droplet, Download, Maximize2, CheckSquare, Square, MousePointer2, MoveHorizontal, ZoomIn, Palette, ShieldCheck, BookOpen, Info, Check, Layers
 } from 'lucide-react';
 
-// --- 全局常量与配置 ---
+/**
+ * Contact Angle Master - 适配 GitHub/Netlify 部署版
+ * * 功能：
+ * 1. 批量导入接触角 Excel 数据
+ * 2. 自动分段算法（SCA/ACA/RCA/CAH）
+ * 3. 动态 IQR 去噪与中位数窗口过滤
+ * 4. 多样品统计对比与可视化
+ * 5. 自定义配色与导出配置
+ */
+
+// --- 全局常量 ---
 
 const COLOR_PRESETS = [
   { name: 'Nature风格', sca: '#6366f1', aca: '#10b981', rca: '#f59e0b', cah: '#ec4899' },
@@ -16,6 +26,8 @@ const COLOR_PRESETS = [
   { name: '高对比度', sca: '#4f46e5', aca: '#059669', rca: '#7c3aed', cah: '#db2777' },
   { name: '柔和商务', sca: '#94a3b8', aca: '#64748b', rca: '#cbd5e1', cah: '#e2e8f0' }
 ];
+
+// --- 工具函数 ---
 
 const columnLetterToIndex = (letter) => {
   if (!letter || typeof letter !== 'string') return 7; 
@@ -59,20 +71,20 @@ const AlgorithmFlowchart = () => (
       </marker>
     </defs>
     <rect x="10" y="60" width="100" height="50" rx="8" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="2" />
-    <text x="60" y="90" textAnchor="middle" className="text-[12px] font-bold fill-slate-600">Excel 导入</text>
+    <text x="60" y="90" textAnchor="middle" className="text-[12px] font-bold fill-slate-600">Excel 数据导入</text>
     <line x1="110" y1="85" x2="150" y2="85" stroke="#cbd5e1" strokeWidth="2" markerEnd="url(#arrow)" />
     <rect x="160" y="60" width="120" height="50" rx="8" fill="#eff6ff" stroke="#3b82f6" strokeWidth="2" />
     <text x="220" y="90" textAnchor="middle" className="text-[12px] font-bold fill-blue-600">0° 物理过滤</text>
     <line x1="280" y1="85" x2="320" y2="85" stroke="#cbd5e1" strokeWidth="2" markerEnd="url(#arrow)" />
     <rect x="330" y="40" width="160" height="90" rx="12" fill="#ecfdf5" stroke="#10b981" strokeWidth="2" />
-    <text x="410" y="75" textAnchor="middle" className="text-[11px] font-bold fill-emerald-700">中位数分段</text>
+    <text x="410" y="75" textAnchor="middle" className="text-[11px] font-bold fill-emerald-700">中位数分段逻辑</text>
     <text x="410" y="95" textAnchor="middle" className="text-[9px] fill-emerald-600">(SCA → ACA → RCA)</text>
     <line x1="490" y1="85" x2="530" y2="85" stroke="#cbd5e1" strokeWidth="2" markerEnd="url(#arrow)" />
     <rect x="540" y="60" width="120" height="50" rx="8" fill="#fff7ed" stroke="#f59e0b" strokeWidth="2" />
     <text x="600" y="90" textAnchor="middle" className="text-[11px] font-bold fill-orange-700">IQR 动态去噪</text>
     <line x1="660" y1="85" x2="700" y2="85" stroke="#cbd5e1" strokeWidth="2" markerEnd="url(#arrow)" />
     <rect x="710" y="60" width="80" height="50" rx="8" fill="#fdf2f8" stroke="#ec4899" strokeWidth="2" />
-    <text x="750" y="90" textAnchor="middle" className="text-[11px] font-bold fill-pink-700">统计输出</text>
+    <text x="750" y="90" textAnchor="middle" className="text-[11px] font-bold fill-pink-700">结果输出</text>
   </svg>
 );
 
@@ -89,7 +101,7 @@ const LabelWithTooltip = ({ label, tooltip }) => (
   </div>
 );
 
-// --- 主应用组件 ---
+// --- 主应用入口 ---
 
 export default function App() {
   const [samples, setSamples] = useState([]);
@@ -343,7 +355,7 @@ export default function App() {
             <button onClick={() => setShowHelp(false)} className="absolute top-8 right-8 p-3 bg-slate-100 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-sm"><X size={20}/></button>
             <div className="flex items-center gap-3 mb-8">
                <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-indigo-100"><BookOpen size={24}/></div>
-               <div><h2 className="text-2xl font-black text-slate-900 uppercase">Contact Angle Master 算法指南</h2><p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Documentation & Logic</p></div>
+               <div><h2 className="text-2xl font-black text-slate-900 uppercase">Contact Angle Master 算法指南</h2><p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Metrology Logic & Usage</p></div>
             </div>
             <section className="mb-12 border-b border-slate-100 pb-8">
               <h3 className="text-sm font-black text-indigo-900 mb-4 flex items-center gap-2 tracking-widest uppercase"><ShieldCheck size={18}/> 1. 数据处理流程</h3>
@@ -359,7 +371,7 @@ export default function App() {
 
       {isFullscreenChart && (
         <div className="fixed inset-0 z-[1000] bg-slate-950/95 backdrop-blur-xl p-8 flex flex-col">
-          <div className="flex justify-between items-center mb-8 text-white text-2xl font-black uppercase">汇总分析对比<button onClick={() => setIsFullscreenChart(false)} className="bg-white/10 hover:bg-red-500 p-3 rounded-2xl shadow-xl"><X size={24}/></button></div>
+          <div className="flex justify-between items-center mb-8 text-white text-2xl font-black uppercase">汇总对比视图<button onClick={() => setIsFullscreenChart(false)} className="bg-white/10 hover:bg-red-500 p-3 rounded-2xl shadow-xl"><X size={24}/></button></div>
           <div className="flex-1 w-full bg-white rounded-[3.5rem] p-12 shadow-2xl overflow-hidden">
             {SummaryChartContent(true)}
           </div>
@@ -407,7 +419,7 @@ export default function App() {
                   <button onClick={(e) => {e.stopPropagation(); setSamples(prev => prev.filter(x => x.id !== s.id));}} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
                 </div>
               ))}
-              {!samples.length && <div className="py-8 text-center text-slate-300 text-[10px] font-bold uppercase tracking-widest">请导入测量文件</div>}
+              {!samples.length && <div className="py-8 text-center text-slate-300 text-[10px] font-bold uppercase tracking-widest">请导入文件</div>}
             </div>
           </section>
 
@@ -415,17 +427,17 @@ export default function App() {
             <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Settings2 size={14} /> 算法与同步配置</h2>
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-slate-50 rounded-2xl">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
                   <LabelWithTooltip label="数据列标" tooltip="数值所在的Excel列（如H）。" />
-                  <input type="text" value={config.dataColumnLetter} onChange={e => setConfig({...config, dataColumnLetter: e.target.value.toUpperCase()})} className="w-full bg-transparent border-0 text-center font-black text-sm uppercase outline-none" />
+                  <input type="text" value={config.dataColumnLetter} onChange={e => setConfig({...config, dataColumnLetter: e.target.value.toUpperCase()})} className="w-full bg-transparent border-0 text-center font-black text-sm uppercase focus:ring-0 outline-none" />
                 </div>
-                <div className="p-3 bg-slate-50 rounded-2xl">
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
                   <LabelWithTooltip label="静态点数" tooltip="强制前N个有效点定为SCA阶段。" />
-                  <input type="number" min="0" value={config.staticCount} onChange={e => setConfig({...config, staticCount: Math.max(0, parseInt(e.target.value) || 0)})} className="w-full bg-transparent border-0 text-center font-black text-sm outline-none" />
+                  <input type="number" min="0" value={config.staticCount} onChange={e => setConfig({...config, staticCount: Math.max(0, parseInt(e.target.value) || 0)})} className="w-full bg-transparent border-0 text-center font-black text-sm focus:ring-0 outline-none" />
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
                 <LabelWithTooltip label="判定窗口点数" tooltip="中位数判定窗口大小。建议 3-5。" />
                 <input type="number" min="1" value={config.windowSize} onChange={e => setConfig({...config, windowSize: Math.max(1, parseInt(e.target.value) || 1)})} className="w-full bg-transparent border-0 text-center font-black text-sm outline-none" />
               </div>
@@ -438,11 +450,11 @@ export default function App() {
                 <input type="range" min="1.5" max="15.0" step="0.5" value={config.outlierSensitivity} onChange={e => setConfig({...config, outlierSensitivity: parseFloat(e.target.value)})} className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer" />
               </div>
 
-              <div className="p-5 bg-slate-50/80 rounded-[2rem] border border-slate-100">
+              <div className="p-5 bg-slate-50/80 rounded-[2rem] border border-slate-100 shadow-inner">
                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Download size={14}/> 报表导出设置</h3>
                  <div className="grid grid-cols-2 gap-2 mb-4">
                    {[{id:'sca',l:'SCA'},{id:'aca',l:'ACA'},{id:'rca',l:'RCA'},{id:'cah',l:'CAH'}].map(it => (
-                     <div key={it.id} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-100 cursor-pointer" onClick={() => setConfig({...config, exportSelection: {...config.exportSelection, [it.id]: !config.exportSelection[it.id]}})}>
+                     <div key={it.id} className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-100 cursor-pointer shadow-sm" onClick={() => setConfig({...config, exportSelection: {...config.exportSelection, [it.id]: !config.exportSelection[it.id]}})}>
                         {config.exportSelection[it.id] ? <CheckSquare size={14} className="text-indigo-600" /> : <Square size={14} className="text-slate-300" />}
                         <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">{it.l}</span>
                      </div>
@@ -450,13 +462,13 @@ export default function App() {
                  </div>
                  <div>
                    <LabelWithTooltip label="导出数据精度" tooltip="Excel报表的小数位数。" />
-                   <select value={config.exportPrecision} onChange={e => setConfig({...config, exportPrecision: parseInt(e.target.value)})} className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-black cursor-pointer outline-none">
+                   <select value={config.exportPrecision} onChange={e => setConfig({...config, exportPrecision: parseInt(e.target.value)})} className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-black cursor-pointer outline-none shadow-sm">
                      <option value={1}>1位小数</option><option value={2}>2位小数</option><option value={3}>3位小数</option><option value={4}>4位小数</option>
                    </select>
                  </div>
               </div>
 
-              <div className="p-5 bg-slate-50 rounded-[2rem] border border-slate-100">
+              <div className="p-5 bg-slate-50 rounded-[2rem] border border-slate-100 shadow-inner">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Palette size={14}/> 界面配色管理</h3>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {COLOR_PRESETS.map((p, i) => (
@@ -482,11 +494,11 @@ export default function App() {
           {activeSample && activeStats ? (
             <>
               <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-2">
+                <div className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-2 shadow-inner">
                   <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Edit3 size={12}/> 样品显示名</label>
                   <input type="text" value={activeSample.name} onChange={e => setSamples(prev => prev.map(s => s.id === activeSample.id ? {...s, name: e.target.value} : s))} className="bg-transparent border-0 font-black text-slate-800 text-sm focus:ring-0 outline-none" />
                 </div>
-                <div className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-2">
+                <div className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-2 shadow-inner">
                   <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Droplet size={12}/> 测试液体</label>
                   <input type="text" list="liquid-options" value={activeSample.liquid} onChange={e => setSamples(prev => prev.map(s => s.id === activeSample.id ? {...s, liquid: e.target.value} : s))} className="bg-transparent border-0 font-black text-slate-800 text-sm focus:ring-0 outline-none" />
                 </div>
@@ -496,9 +508,9 @@ export default function App() {
                 <div className="flex justify-between items-center mb-8">
                   <div>
                     <h3 className="font-black text-slate-900 text-lg tracking-tighter uppercase">测量曲线分析</h3>
-                    <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase"><MousePointer2 size={10} className="inline mr-1"/> 右键强制修正 | 0°噪点不参与识别</p>
+                    <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase"><MousePointer2 size={10} className="inline mr-1"/> 右键强制修正分段 | 自动屏蔽 0° 噪点</p>
                   </div>
-                  <div className="flex gap-4 text-[9px] font-black uppercase bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 shadow-sm">
+                  <div className="flex gap-4 text-[9px] font-black uppercase bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 shadow-inner">
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.sca}}></div> SCA</span>
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.aca}}></div> ACA</span>
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.rca}}></div> RCA</span>
@@ -588,7 +600,7 @@ export default function App() {
 
                       <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-dashed border-slate-100">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mr-2"><Plus size={12}/> 数据来源:</span>
-                        <button onClick={() => setVisibleSampleIds(visibleSampleIds.length === stats.length ? [] : stats.map(s=>s.id))} className="text-[9px] font-black px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-indigo-600 transition-colors">
+                        <button onClick={() => setVisibleSampleIds(visibleSampleIds.length === stats.length ? [] : stats.map(s=>s.id))} className="text-[9px] font-black px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-indigo-600 transition-colors shadow-sm">
                           {visibleSampleIds.length === stats.length ? '取消全选' : '全选样本'}
                         </button>
                         <div className="flex flex-wrap gap-2">
