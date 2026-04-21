@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   BarChart, Bar, ErrorBar, LabelList
 } from 'recharts';
 import { 
@@ -252,9 +252,13 @@ export default function App() {
   const windowedData = useMemo(() => {
     if (!activeSample || !activeSample.data) return [];
     const full = activeSample.data;
-    const size = Math.max(5, Math.floor(full.length * (viewZoom / 100)));
-    const start = Math.floor((full.length - size) * (viewOffset / 100));
-    return full.slice(start, start + size).filter((_, i) => i % config.displayDensity === 0);
+    if (!full.length) return [];
+    const rawSize = Math.max(5, Math.floor(full.length * (viewZoom / 100)));
+    const size = Math.min(full.length, rawSize);
+    const maxStart = Math.max(0, full.length - size);
+    const start = Math.min(maxStart, Math.max(0, Math.floor(maxStart * (viewOffset / 100))));
+    const sliced = full.slice(start, start + size);
+    return sliced.filter((_, i) => i % config.displayDensity === 0);
   }, [activeSample, viewZoom, viewOffset, config.displayDensity]);
 
   const chartYBounds = useMemo(() => {
@@ -378,15 +382,16 @@ export default function App() {
   }, [samples]);
 
   useEffect(() => {
-    setSelectedPointIndices([]);
+    setSelectedPointIndices(prev => (prev.length ? [] : prev));
     brushDraftRef.current = null;
     if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
-  }, [activeSampleId, viewZoom, viewOffset, config.displayDensity, isBrushMode]);
+  }, [activeSampleId, config.displayDensity, isBrushMode]);
 
 
 
   // --- 5. 汇总图表组件 ---
   const SummaryChart = ({ isLarge = false }) => {
+    const summaryChartRef = React.useRef(null);
     if (!filteredSummaryStats || filteredSummaryStats.length === 0) {
       return (
         <div className="h-full w-full flex flex-col items-center justify-center text-center">
@@ -398,8 +403,8 @@ export default function App() {
     }
     
     return (
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={filteredSummaryStats} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+      <div ref={summaryChartRef} className="w-full h-full">
+        <BarChart data={filteredSummaryStats} width={Math.max(320, summaryChartRef.current?.clientWidth || 800)} height={isLarge ? 520 : 300} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis dataKey="name" fontSize={isLarge ? 14 : 11} fontWeight="black" tickLine={false} axisLine={false} stroke="#94a3b8" />
           <YAxis domain={[0, 'auto']} fontSize={isLarge ? 12 : 10} width={30} tickLine={false} axisLine={false} stroke="#94a3b8" />
@@ -430,7 +435,7 @@ export default function App() {
             </Bar>
           )}
         </BarChart>
-      </ResponsiveContainer>
+      </div>
     );
   };
 
