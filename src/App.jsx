@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-  BarChart, Bar, ErrorBar
+  BarChart, Bar, ErrorBar, LabelList
 } from 'recharts';
 import { 
   Upload, FileText, Trash2, X,
-  Settings2, BarChart3, Plus, Activity, Filter, HelpCircle, Edit3, Droplet, Download, Maximize2, CheckSquare, Square, MousePointer2, MoveHorizontal, ZoomIn, Palette, ShieldCheck, BookOpen, Layers
+  Settings2, BarChart3, Plus, Activity, Filter, HelpCircle, Edit3, Droplet, Download, Maximize2, CheckSquare, Square, MousePointer2, MoveHorizontal, ZoomIn, Palette, ShieldCheck, BookOpen, Layers, Type
 } from 'lucide-react';
 
 /**
@@ -106,10 +106,14 @@ export default function App() {
 
   const [summaryMetrics, setSummaryMetrics] = useState({ sca: true, aca: true, rca: true, cah: true });
   const [visibleSampleIds, setVisibleSampleIds] = useState([]);
+  const [showSummaryValues, setShowSummaryValues] = useState(false);
 
   const [chartColors, setChartColors] = useState({ sca: '#6366f1', aca: '#10b981', rca: '#f59e0b', cah: '#ec4899' });
   const [viewZoom, setViewZoom] = useState(100); 
   const [viewOffset, setViewOffset] = useState(0); 
+  
+  // --- 引用 ---
+  const chartContainerRef = React.useRef(null);
 
   const [config, setConfig] = useState({
     staticCount: 3, 
@@ -126,14 +130,14 @@ export default function App() {
   // --- 核心算法逻辑 ---
   const runSegmentationPipeline = useCallback((points, currentConfig, overrides = {}, exclusions = []) => {
     if (!points || points.length === 0) return [];
-    
-    const data = points.map(pt => ({
+    const data = points.map((pt, i) => ({
       ...pt,
+      index: pt.index || i,
       isZero: (pt.value <= 1.0),
-      isExcluded: exclusions.includes(pt.index),
-      active: pt.value > 1.0 && !exclusions.includes(pt.index),
+      isExcluded: exclusions.includes(pt.index || i),
+      active: pt.value > 1.0 && !exclusions.includes(pt.index || i),
       isOutlier: false,
-      isManual: !!overrides[pt.index]
+      isManual: !!overrides[pt.index || i]
     }));
 
     let currentType = 'ACA';
@@ -142,8 +146,8 @@ export default function App() {
 
     const segmented = data.map((pt, i, arr) => {
       let type = currentType;
-      if (overrides[pt.index]) {
-        type = overrides[pt.index];
+      if (overrides[pt.index || i]) {
+        type = overrides[pt.index || i];
         currentType = type;
         if (type === 'ACA') cycle++;
       } else if (i < staticCount) {
@@ -311,6 +315,8 @@ export default function App() {
     return () => window.removeEventListener('click', closeMenu);
   }, []);
 
+
+
   useEffect(() => {
     if (samples.length === 0) return;
     setSamples(prev => prev.map(s => {
@@ -318,6 +324,8 @@ export default function App() {
       return { ...s, data: runSegmentationPipeline(rawPts, config, s.overrides, s.exclusions) };
     }));
   }, [config.staticCount, config.angleThreshold, config.windowSize, config.autoFilter, config.dataColumnLetter, config.outlierSensitivity]);
+
+
 
   // --- 5. 汇总图表组件 ---
   const SummaryChart = ({ isLarge = false }) => {
@@ -339,10 +347,30 @@ export default function App() {
           <YAxis domain={[0, 'auto']} fontSize={isLarge ? 12 : 10} width={30} tickLine={false} axisLine={false} stroke="#94a3b8" />
           <Tooltip formatter={(v) => [`${Number(v).toFixed(2)}°`, "角度"]} contentStyle={{borderRadius: '1.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', fontSize: isLarge ? '14px' : '11px', fontWeight: 'bold'}} cursor={{fill: '#f1f5f9', radius: 10}} />
           <Legend iconType="circle" wrapperStyle={{paddingTop: '20px', fontSize: isLarge ? '14px' : '10px', fontWeight: 'bold'}} />
-          {summaryMetrics.sca && <Bar key="sum-sca" dataKey="scaAvg" name="静态角 SCA" fill={chartColors.sca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="scaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
-          {summaryMetrics.aca && <Bar key="sum-aca" dataKey="acaAvg" name="前进角 ACA" fill={chartColors.aca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="acaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
-          {summaryMetrics.rca && <Bar key="sum-rca" dataKey="rcaAvg" name="后退角 RCA" fill={chartColors.rca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="rcaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
-          {summaryMetrics.cah && <Bar key="sum-cah" dataKey="cahAvg" name="接触角滞后 CAH" fill={chartColors.cah} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="cahStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
+          {summaryMetrics.sca && (
+            <Bar key="sum-sca" dataKey="scaAvg" name="静态角 SCA" fill={chartColors.sca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}>
+              <ErrorBar dataKey="scaStd" width={4} strokeWidth={2} stroke="#333" />
+              {showSummaryValues && <LabelList dataKey="scaAvg" position="top" offset={10} style={{ fontSize: '9px', fontWeight: 'bold', fill: chartColors.sca }} formatter={(v) => `${Number(v).toFixed(config.exportPrecision)}°`} />}
+            </Bar>
+          )}
+          {summaryMetrics.aca && (
+            <Bar key="sum-aca" dataKey="acaAvg" name="前进角 ACA" fill={chartColors.aca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}>
+              <ErrorBar dataKey="acaStd" width={4} strokeWidth={2} stroke="#333" />
+              {showSummaryValues && <LabelList dataKey="acaAvg" position="top" offset={10} style={{ fontSize: '9px', fontWeight: 'bold', fill: chartColors.aca }} formatter={(v) => `${Number(v).toFixed(config.exportPrecision)}°`} />}
+            </Bar>
+          )}
+          {summaryMetrics.rca && (
+            <Bar key="sum-rca" dataKey="rcaAvg" name="后退角 RCA" fill={chartColors.rca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}>
+              <ErrorBar dataKey="rcaStd" width={4} strokeWidth={2} stroke="#333" />
+              {showSummaryValues && <LabelList dataKey="rcaAvg" position="top" offset={10} style={{ fontSize: '9px', fontWeight: 'bold', fill: chartColors.rca }} formatter={(v) => `${Number(v).toFixed(config.exportPrecision)}°`} />}
+            </Bar>
+          )}
+          {summaryMetrics.cah && (
+            <Bar key="sum-cah" dataKey="cahAvg" name="接触角滞后 CAH" fill={chartColors.cah} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}>
+              <ErrorBar dataKey="cahStd" width={4} strokeWidth={2} stroke="#333" />
+              {showSummaryValues && <LabelList dataKey="cahAvg" position="top" offset={10} style={{ fontSize: '9px', fontWeight: 'bold', fill: chartColors.cah }} formatter={(v) => `${Number(v).toFixed(config.exportPrecision)}°`} />}
+            </Bar>
+          )}
         </BarChart>
       </ResponsiveContainer>
     );
@@ -377,17 +405,17 @@ export default function App() {
       {isFullscreenChart && (
         <div className="fixed inset-0 z-[1000] bg-slate-950/95 backdrop-blur-xl p-8 flex flex-col">
           <div className="flex justify-between items-center mb-8 text-white text-2xl font-black uppercase">汇总对比视图<button onClick={() => setIsFullscreenChart(false)} className="bg-white/10 hover:bg-red-500 p-3 rounded-2xl shadow-xl"><X size={24}/></button></div>
-          <div className="flex-1 w-full bg-white rounded-[3.5rem] p-12 shadow-2xl overflow-hidden">
+          <div className="flex-1 w-full bg-white rounded-[3.5rem] p-12 shadow-2xl overflow-hidden min-h-[400px]">
             <SummaryChart isLarge={true} />
           </div>
         </div>
       )}
 
       {contextMenu && (
-        <div className="fixed z-[999] bg-slate-900 text-white shadow-2xl rounded-2xl py-1 text-xs font-bold w-52 border border-white/10" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
-          <div className="px-4 py-2 border-b border-white/5 text-[9px] text-slate-400 uppercase italic">Point: #{contextMenu.pointIndex}</div>
+        <div className="fixed z-[9999] bg-slate-900 text-white shadow-2xl rounded-2xl py-1 text-xs font-bold w-52 border border-white/10" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
+          <div className="px-4 py-2 border-b border-white/5 text-[9px] text-slate-400 uppercase italic">数据点修正: #{contextMenu.pointIndex}</div>
           <button onClick={() => { handlePointAction('ACA', contextMenu.pointIndex); setContextMenu(null); }} className="w-full text-left px-4 py-3 hover:bg-white/10 text-emerald-400 flex items-center justify-between">设为 ACA 起点 <Activity size={12}/></button>
-          <button onClick={() => { handlePointAction('RCA', contextMenu.pointIndex); setContextMenu(null); }} className="w-full text-left px-4 py-3 hover:bg-white/10 text-orange-400 flex items-center justify-between border-b border-white/5">设为 RCA 起点 <Activity size={12}/></button>
+          <button onClick={() => { handlePointAction('RCA', contextMenu.pointIndex); setContextMenu(null); }} className="w-full text-left px-4 py-3 hover:bg-white/10 text-orange-400 flex items-center justify-between">设为 RCA 起点 <Activity size={12}/></button>
           <button onClick={() => { handlePointAction('TOGGLE_NOISE', contextMenu.pointIndex); setContextMenu(null); }} className="w-full text-left px-4 py-3 hover:bg-red-500 text-white flex items-center justify-between uppercase tracking-tighter">标记噪点 / 恢复 <Filter size={12}/></button>
         </div>
       )}
@@ -512,7 +540,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm relative">
+              <div ref={chartContainerRef} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm relative">
                 <div className="flex justify-between items-center mb-8">
                   <div>
                     <h3 className="font-black text-slate-900 text-lg tracking-tighter uppercase">测量曲线分析</h3>
@@ -525,37 +553,51 @@ export default function App() {
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-red-400"></div> 噪点</span>
                   </div>
                 </div>
-                <div className="h-[400px] w-full mb-8">
+                <div className="h-[400px] w-full mb-8 relative" style={{ minWidth: '400px', minHeight: '400px', cursor: 'crosshair' }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={windowedData}>
+                    <LineChart 
+                      data={windowedData}
+                      onContextMenu={(e) => {
+                        e?.preventDefault?.();
+                        if (e && e.activeTooltipIndex !== undefined && chartContainerRef.current) {
+                          const point = windowedData[e.activeTooltipIndex];
+                          if (!point) return;
+                          const rect = chartContainerRef.current.getBoundingClientRect();
+                          setContextMenu({ x: rect.left + e.chartX, y: rect.top + e.chartY, pointIndex: point.index });
+                        }
+                      }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                       <XAxis dataKey="index" hide />
                       <YAxis domain={['auto', 'auto']} fontSize={11} width={30} stroke="#cbd5e1" />
-                      <Tooltip content={({ active, payload }) => {
-                        if (active && payload && payload.length) {
-                          const d = payload[0].payload;
-                          return (
-                            <div className="bg-slate-900 text-white p-4 shadow-2xl rounded-2xl text-[10px] min-w-[140px] border border-white/10">
-                              <div className="flex justify-between font-black text-indigo-400 mb-2 border-b border-white/5 pb-2 uppercase tracking-tighter"><span>{d.type} 段</span><span>#{d.index}</span></div>
-                              <p className={`text-2xl font-black mb-1 ${d.isZero ? 'text-red-400' : 'text-white'}`}>{Number(d.value).toFixed(2)}°</p>
-                              <p className="text-white/40 font-bold mt-2 pt-2 border-t border-white/5 tracking-widest italic uppercase text-[8px]">Right-Click to Edit</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }} />
-                      <Line type="monotone" dataKey="value" stroke="#e2e8f0" strokeWidth={2} dot={(props) => {
+                      <Tooltip 
+                        wrapperStyle={{ pointerEvents: 'none', zIndex: 100 }} 
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload;
+                            return (
+                              <div className="bg-slate-900 text-white p-4 shadow-2xl rounded-2xl text-[10px] min-w-[140px] border border-white/10 pointer-events-none">
+                                <div className="flex justify-between font-black text-indigo-400 mb-2 border-b border-white/5 pb-2 uppercase"><span>{d.type} 段</span><span>#{d.index}</span></div>
+                                <p className={`text-2xl font-black mb-1 ${d.isZero ? 'text-red-400' : 'text-white'}`}>{Number(d.value).toFixed(2)}°</p>
+                                <p className="text-white/40 font-bold mt-2 pt-2 border-t border-white/5 tracking-widest italic uppercase text-[8px]">右键点击此处修改分段</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }} 
+                      />
+                      <Line 
+                        type="monotone" dataKey="value" stroke="#e2e8f0" strokeWidth={2} isAnimationActive={false}
+                        dot={(props) => {
                           const { cx, cy, payload } = props;
                           let fill = "#6366f1"; 
                           if (payload.type === 'SCA') fill = chartColors.sca;
                           if (payload.type === 'ACA') fill = chartColors.aca;
                           if (payload.type === 'RCA') fill = chartColors.rca;
                           if (!payload.active || payload.isZero || (config.autoFilter && payload.isOutlier)) fill = "#f87171";
-                          return (
-                            <circle key={`pt-f-${payload.index}`} cx={cx} cy={cy} r={payload.isManual ? 5 : 3.5} fill={fill} stroke={payload.isManual ? "#000" : "#fff"} strokeWidth={payload.isManual ? 2 : 0.5} className="cursor-pointer transition-all hover:scale-150"
-                              onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, pointIndex: payload.index }); }} />
-                          );
-                        }} />
+                          return (<circle key={`pt-${payload.index}`} cx={cx} cy={cy} r={payload.isManual ? 5 : 3.5} fill={fill} stroke={payload.isManual ? "#000" : "#fff"} strokeWidth={payload.isManual ? 2 : 0.5} style={{ pointerEvents: 'none' }} />);
+                        }} 
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -604,6 +646,12 @@ export default function App() {
                             {summaryMetrics[m.id] ? <CheckSquare size={12}/> : <Square size={12}/>} {m.l}
                           </button>
                         ))}
+                        <button
+                          onClick={() => setShowSummaryValues(!showSummaryValues)}
+                          className={`ml-auto px-4 py-2 rounded-xl text-[10px] font-black transition-all flex items-center gap-2 border-2 ${showSummaryValues ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100' : 'bg-slate-50 text-slate-400 border-transparent'}`}
+                        >
+                          <Type size={12} /> {showSummaryValues ? '隐藏数值' : '显示数值'}
+                        </button>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-dashed border-slate-100">
