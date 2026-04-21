@@ -106,7 +106,11 @@ export default function App() {
 
   const [summaryMetrics, setSummaryMetrics] = useState({ sca: true, aca: true, rca: true, cah: true });
   const [visibleSampleIds, setVisibleSampleIds] = useState([]);
+  const [summaryOrderIds, setSummaryOrderIds] = useState([]);
+  const [draggingSampleId, setDraggingSampleId] = useState(null);
   const [showSummaryValues, setShowSummaryValues] = useState(false);
+  const [isBrushMode, setIsBrushMode] = useState(false);
+  const [selectedPointIndices, setSelectedPointIndices] = useState([]);
 
   const [chartColors, setChartColors] = useState({ sca: '#6366f1', aca: '#10b981', rca: '#f59e0b', cah: '#ec4899' });
   const [viewZoom, setViewZoom] = useState(100); 
@@ -114,6 +118,9 @@ export default function App() {
   
   // --- 引用 ---
   const chartContainerRef = React.useRef(null);
+  const lineChartAreaRef = React.useRef(null);
+  const brushBoxRef = React.useRef(null);
+  const brushDraftRef = React.useRef(null);
 
   const [config, setConfig] = useState({
     staticCount: 3, 
@@ -236,7 +243,11 @@ export default function App() {
 
   const activeSample = useMemo(() => samples.find(s => s.id === activeSampleId) || null, [samples, activeSampleId]);
   const activeStats = useMemo(() => stats.find(s => s.id === activeSampleId) || null, [stats, activeSampleId]);
-  const filteredSummaryStats = useMemo(() => stats.filter(s => visibleSampleIds.includes(s.id)), [stats, visibleSampleIds]);
+  const filteredSummaryStats = useMemo(() => {
+    const visibleSet = new Set(visibleSampleIds);
+    const byId = new Map(stats.map(s => [s.id, s]));
+    return summaryOrderIds.filter(id => visibleSet.has(id) && byId.has(id)).map(id => byId.get(id));
+  }, [stats, visibleSampleIds, summaryOrderIds]);
 
   const windowedData = useMemo(() => {
     if (!activeSample || !activeSample.data) return [];
@@ -245,6 +256,15 @@ export default function App() {
     const start = Math.floor((full.length - size) * (viewOffset / 100));
     return full.slice(start, start + size).filter((_, i) => i % config.displayDensity === 0);
   }, [activeSample, viewZoom, viewOffset, config.displayDensity]);
+
+  const chartYBounds = useMemo(() => {
+    if (!windowedData.length) return { min: 0, max: 1 };
+    const values = windowedData.map(d => d.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    if (min === max) return { min: min - 1, max: max + 1 };
+    return { min, max };
+  }, [windowedData]);
 
   // --- 事件处理 ---
   const handleFileUpload = useCallback(async (e) => {
@@ -290,6 +310,29 @@ export default function App() {
     }));
   }, [activeSampleId, config, runSegmentationPipeline]);
 
+  const applyBatchPointAction = useCallback((action) => {
+    if (!selectedPointIndices.length) return;
+    const selectedSet = new Set(selectedPointIndices);
+    setSamples(prev => prev.map(s => {
+      if (s.id !== activeSampleId) return s;
+      let newOverrides = { ...(s.overrides || {}) };
+      let newExclusions = [...(s.exclusions || [])];
+      if (action === 'ACA' || action === 'RCA') {
+        selectedSet.forEach(index => { newOverrides[index] = action; });
+      } else if (action === 'TOGGLE_NOISE') {
+        selectedSet.forEach(index => {
+          if (newExclusions.includes(index)) newExclusions = newExclusions.filter(i => i !== index);
+          else newExclusions.push(index);
+        });
+      }
+      const rawPoints = s.data.map(d => ({ index: d.index, value: d.value }));
+      return { ...s, overrides: newOverrides, exclusions: newExclusions, data: runSegmentationPipeline(rawPoints, config, newOverrides, newExclusions) };
+    }));
+    setSelectedPointIndices([]);
+    brushDraftRef.current = null;
+    if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
+  }, [activeSampleId, config, runSegmentationPipeline, selectedPointIndices]);
+
   const exportExcel = useCallback(() => {
     if (!window.XLSX || stats.length === 0) return;
     const p = config.exportPrecision;
@@ -324,6 +367,21 @@ export default function App() {
       return { ...s, data: runSegmentationPipeline(rawPts, config, s.overrides, s.exclusions) };
     }));
   }, [config.staticCount, config.angleThreshold, config.windowSize, config.autoFilter, config.dataColumnLetter, config.outlierSensitivity]);
+
+  useEffect(() => {
+    const sampleIds = samples.map(s => s.id);
+    setSummaryOrderIds(prev => {
+      const existing = prev.filter(id => sampleIds.includes(id));
+      const appended = sampleIds.filter(id => !existing.includes(id));
+      return [...existing, ...appended];
+    });
+  }, [samples]);
+
+  useEffect(() => {
+    setSelectedPointIndices([]);
+    brushDraftRef.current = null;
+    if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
+  }, [activeSampleId, viewZoom, viewOffset, config.displayDensity, isBrushMode]);
 
 
 
@@ -375,6 +433,23 @@ export default function App() {
       </ResponsiveContainer>
     );
   };
+
+  const resolvedLineChartWidth = Math.max(320, (lineChartAreaRef.current?.clientWidth || 800));
+
+  const handleSummaryChipDrop = useCallback((targetId) => {
+    if (!draggingSampleId || draggingSampleId === targetId) return;
+    setSummaryOrderIds(prev => {
+      const ordered = prev.filter(Boolean);
+      const from = ordered.indexOf(draggingSampleId);
+      const to = ordered.indexOf(targetId);
+      if (from < 0 || to < 0) return prev;
+      const next = [...ordered];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setDraggingSampleId(null);
+  }, [draggingSampleId]);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans p-4 md:p-8">
@@ -546,60 +621,157 @@ export default function App() {
                     <h3 className="font-black text-slate-900 text-lg tracking-tighter uppercase">测量曲线分析</h3>
                     <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase"><MousePointer2 size={10} className="inline mr-1"/> 右键强制修正分段 | 自动屏蔽 0° 噪点</p>
                   </div>
-                  <div className="flex gap-4 text-[9px] font-black uppercase bg-slate-50 px-5 py-3 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsBrushMode(prev => !prev)}
+                      className={`px-3 py-2 rounded-xl text-[10px] font-black transition-all border ${isBrushMode ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-500 border-slate-100'}`}
+                    >
+                      {isBrushMode ? '退出框选' : '框选模式'}
+                    </button>
+                    <div className="flex gap-4 text-[9px] font-black uppercase bg-slate-50 px-5 py-3 rounded-xl border border-slate-100">
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.sca}}></div> SCA</span>
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.aca}}></div> ACA</span>
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.rca}}></div> RCA</span>
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-red-400"></div> 噪点</span>
+                    </div>
                   </div>
                 </div>
-                <div className="h-[400px] w-full mb-8 relative" style={{ minWidth: '400px', minHeight: '400px', cursor: 'crosshair' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart 
-                      data={windowedData}
-                      onContextMenu={(e) => {
-                        e?.preventDefault?.();
-                        if (e && e.activeTooltipIndex !== undefined && chartContainerRef.current) {
-                          const point = windowedData[e.activeTooltipIndex];
-                          if (!point) return;
-                          const rect = chartContainerRef.current.getBoundingClientRect();
-                          setContextMenu({ x: rect.left + e.chartX, y: rect.top + e.chartY, pointIndex: point.index });
+                {isBrushMode && (
+                  <div className="mb-4 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black text-indigo-600">已选中 {selectedPointIndices.length} 个点</span>
+                    <button onClick={() => applyBatchPointAction('ACA')} disabled={!selectedPointIndices.length} className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-emerald-500 text-white disabled:opacity-40">批量设为 ACA</button>
+                    <button onClick={() => applyBatchPointAction('RCA')} disabled={!selectedPointIndices.length} className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-orange-500 text-white disabled:opacity-40">批量设为 RCA</button>
+                    <button onClick={() => applyBatchPointAction('TOGGLE_NOISE')} disabled={!selectedPointIndices.length} className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-rose-500 text-white disabled:opacity-40">批量标记噪点</button>
+                    <button onClick={() => { setSelectedPointIndices([]); brushDraftRef.current = null; if (brushBoxRef.current) brushBoxRef.current.style.display = 'none'; }} disabled={!selectedPointIndices.length} className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white text-slate-500 border border-slate-200 disabled:opacity-40">清空选择</button>
+                  </div>
+                )}
+                <div ref={lineChartAreaRef} className="h-[400px] w-full mb-8 relative" style={{ minWidth: 0, minHeight: 400, cursor: 'crosshair' }}>
+                  <LineChart
+                    width={resolvedLineChartWidth}
+                    height={400}
+                    data={windowedData}
+                    onContextMenu={(e) => {
+                      e?.preventDefault?.();
+                      if (isBrushMode) return;
+                      if (e && e.activeTooltipIndex !== undefined && chartContainerRef.current) {
+                        const point = windowedData[e.activeTooltipIndex];
+                        if (!point) return;
+                        const rect = chartContainerRef.current.getBoundingClientRect();
+                        setContextMenu({ x: rect.left + e.chartX, y: rect.top + e.chartY, pointIndex: point.index });
+                      }
+                    }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="index" hide />
+                    <YAxis domain={['auto', 'auto']} fontSize={11} width={30} stroke="#cbd5e1" />
+                    <Tooltip 
+                      wrapperStyle={{ pointerEvents: 'none', zIndex: 100 }} 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const d = payload[0].payload;
+                          return (
+                            <div className="bg-slate-900 text-white p-4 shadow-2xl rounded-2xl text-[10px] min-w-[140px] border border-white/10 pointer-events-none">
+                              <div className="flex justify-between font-black text-indigo-400 mb-2 border-b border-white/5 pb-2 uppercase"><span>{d.type} 段</span><span>#{d.index}</span></div>
+                              <p className={`text-2xl font-black mb-1 ${d.isZero ? 'text-red-400' : 'text-white'}`}>{Number(d.value).toFixed(2)}°</p>
+                              <p className="text-white/40 font-bold mt-2 pt-2 border-t border-white/5 tracking-widest italic uppercase text-[8px]">右键点击此处修改分段</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }} 
+                    />
+                    <Line 
+                      type="monotone" dataKey="value" stroke="#e2e8f0" strokeWidth={2} isAnimationActive={false}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props;
+                        let fill = "#6366f1"; 
+                        if (payload.type === 'SCA') fill = chartColors.sca;
+                        if (payload.type === 'ACA') fill = chartColors.aca;
+                        if (payload.type === 'RCA') fill = chartColors.rca;
+                        if (!payload.active || payload.isZero || (config.autoFilter && payload.isOutlier)) fill = "#f87171";
+                        const isSelected = selectedPointIndices.includes(payload.index);
+                        return (<circle key={`pt-${payload.index}`} cx={cx} cy={cy} r={isSelected ? 6 : (payload.isManual ? 5 : 3.5)} fill={fill} stroke={isSelected ? "#111827" : (payload.isManual ? "#000" : "#fff")} strokeWidth={isSelected ? 2.5 : (payload.isManual ? 2 : 0.5)} style={{ pointerEvents: 'none' }} />);
+                      }} 
+                    />
+                  </LineChart>
+                  {isBrushMode && (
+                    <div
+                      className="absolute inset-0 z-20"
+                      style={{ cursor: 'crosshair' }}
+                      onMouseDown={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const x = e.clientX - rect.left;
+                        const y = e.clientY - rect.top;
+                        brushDraftRef.current = { startX: x, startY: y, endX: x, endY: y, additive: e.ctrlKey || e.metaKey };
+                        if (brushBoxRef.current) {
+                          brushBoxRef.current.style.display = 'block';
+                          brushBoxRef.current.style.left = `${x}px`;
+                          brushBoxRef.current.style.top = `${y}px`;
+                          brushBoxRef.current.style.width = '0px';
+                          brushBoxRef.current.style.height = '0px';
                         }
                       }}
+                      onMouseMove={(e) => {
+                        const draft = brushDraftRef.current;
+                        if (!draft) return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        draft.endX = e.clientX - rect.left;
+                        draft.endY = e.clientY - rect.top;
+                        if (brushBoxRef.current) {
+                          const left = Math.min(draft.startX, draft.endX);
+                          const top = Math.min(draft.startY, draft.endY);
+                          const width = Math.abs(draft.endX - draft.startX);
+                          const height = Math.abs(draft.endY - draft.startY);
+                          brushBoxRef.current.style.left = `${left}px`;
+                          brushBoxRef.current.style.top = `${top}px`;
+                          brushBoxRef.current.style.width = `${width}px`;
+                          brushBoxRef.current.style.height = `${height}px`;
+                        }
+                      }}
+                      onMouseUp={() => {
+                        const draft = brushDraftRef.current;
+                        if (!draft) return;
+                        const left = Math.min(draft.startX, draft.endX);
+                        const right = Math.max(draft.startX, draft.endX);
+                        const top = Math.min(draft.startY, draft.endY);
+                        const bottom = Math.max(draft.startY, draft.endY);
+                        const chartWidth = chartContainerRef.current?.clientWidth || 1;
+                        const chartHeight = 400;
+                        const pxLeft = 42;
+                        const pxRight = chartWidth - 22;
+                        const pxTop = 16;
+                        const pxBottom = chartHeight - 22;
+                        const xRange = pxRight - pxLeft;
+                        const yRange = pxBottom - pxTop;
+                        if (xRange <= 0 || yRange <= 0 || !windowedData.length) {
+                          brushDraftRef.current = null;
+                          if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
+                          return;
+                        }
+                        const minVal = chartYBounds.min;
+                        const maxVal = chartYBounds.max;
+                        const nextSelected = windowedData.filter((d, i) => {
+                          const ratioX = windowedData.length <= 1 ? 0 : (i / (windowedData.length - 1));
+                          const pxX = pxLeft + ratioX * xRange;
+                          const ratioY = (d.value - minVal) / (maxVal - minVal);
+                          const pxY = pxBottom - ratioY * yRange;
+                          return pxX >= left && pxX <= right && pxY >= top && pxY <= bottom;
+                        }).map(d => d.index);
+                        setSelectedPointIndices(prev => {
+                          if (!draft.additive) return nextSelected;
+                          return Array.from(new Set([...prev, ...nextSelected]));
+                        });
+                        brushDraftRef.current = null;
+                        if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
+                      }}
+                      onMouseLeave={() => {
+                        brushDraftRef.current = null;
+                        if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
+                      }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="index" hide />
-                      <YAxis domain={['auto', 'auto']} fontSize={11} width={30} stroke="#cbd5e1" />
-                      <Tooltip 
-                        wrapperStyle={{ pointerEvents: 'none', zIndex: 100 }} 
-                        content={({ active, payload }) => {
-                          if (active && payload && payload.length) {
-                            const d = payload[0].payload;
-                            return (
-                              <div className="bg-slate-900 text-white p-4 shadow-2xl rounded-2xl text-[10px] min-w-[140px] border border-white/10 pointer-events-none">
-                                <div className="flex justify-between font-black text-indigo-400 mb-2 border-b border-white/5 pb-2 uppercase"><span>{d.type} 段</span><span>#{d.index}</span></div>
-                                <p className={`text-2xl font-black mb-1 ${d.isZero ? 'text-red-400' : 'text-white'}`}>{Number(d.value).toFixed(2)}°</p>
-                                <p className="text-white/40 font-bold mt-2 pt-2 border-t border-white/5 tracking-widest italic uppercase text-[8px]">右键点击此处修改分段</p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        }} 
-                      />
-                      <Line 
-                        type="monotone" dataKey="value" stroke="#e2e8f0" strokeWidth={2} isAnimationActive={false}
-                        dot={(props) => {
-                          const { cx, cy, payload } = props;
-                          let fill = "#6366f1"; 
-                          if (payload.type === 'SCA') fill = chartColors.sca;
-                          if (payload.type === 'ACA') fill = chartColors.aca;
-                          if (payload.type === 'RCA') fill = chartColors.rca;
-                          if (!payload.active || payload.isZero || (config.autoFilter && payload.isOutlier)) fill = "#f87171";
-                          return (<circle key={`pt-${payload.index}`} cx={cx} cy={cy} r={payload.isManual ? 5 : 3.5} fill={fill} stroke={payload.isManual ? "#000" : "#fff"} strokeWidth={payload.isManual ? 2 : 0.5} style={{ pointerEvents: 'none' }} />);
-                        }} 
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                      <div ref={brushBoxRef} className="absolute border-2 border-indigo-500 bg-indigo-300/20 rounded-sm hidden" />
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-5 pt-8 border-t border-slate-50"><div className="flex items-center gap-6"><div className="w-24 shrink-0 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest"><ZoomIn size={14}/> 范围缩放</div><input type="range" min="1" max="100" value={viewZoom} onChange={e => setViewZoom(parseInt(e.target.value))} className="flex-1 h-1 bg-slate-100 rounded-lg appearance-none accent-indigo-600" /><span className="w-12 text-right font-black text-xs text-indigo-600">{viewZoom}%</span></div><div className="flex items-center gap-6"><div className="w-24 shrink-0 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest"><MoveHorizontal size={14}/> 视窗平移</div><input type="range" min="0" max="100" value={viewOffset} onChange={e => setViewOffset(parseInt(e.target.value))} className="flex-1 h-1 bg-slate-100 rounded-lg appearance-none accent-slate-400" /><span className="w-12 text-right font-black text-xs text-slate-400">{viewOffset}%</span></div></div>
               </div>
@@ -656,11 +828,31 @@ export default function App() {
 
                       <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-dashed border-slate-100">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 mr-2"><FileText size={12}/> 样品勾选:</span>
-                        {samples.map(s => (
-                          <button key={s.id} onClick={() => setVisibleSampleIds(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])} className={`px-3 py-1.5 rounded-xl text-[10px] font-black transition-all flex items-center gap-2 border ${visibleSampleIds.includes(s.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600'}`}>
+                        <button
+                          onClick={() => setSummaryOrderIds(samples.map(s => s.id))}
+                          className="px-3 py-1.5 rounded-xl text-[10px] font-black bg-slate-50 border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-all"
+                        >
+                          恢复默认排序
+                        </button>
+                        {summaryOrderIds.map(id => {
+                          const s = samples.find(sample => sample.id === id);
+                          if (!s) return null;
+                          return (
+                          <button
+                            key={s.id}
+                            onClick={() => setVisibleSampleIds(prev => prev.includes(s.id) ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                            draggable
+                            onDragStart={(e) => { setDraggingSampleId(s.id); e.dataTransfer.effectAllowed = 'move'; }}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => { e.preventDefault(); handleSummaryChipDrop(s.id); }}
+                            onDragEnd={() => setDraggingSampleId(null)}
+                            title="拖动可调整柱状图左右顺序"
+                            className={`px-3 py-1.5 rounded-xl text-[10px] font-black transition-all flex items-center gap-2 border ${visibleSampleIds.includes(s.id) ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200 text-slate-600'} ${draggingSampleId === s.id ? 'opacity-50' : ''}`}
+                          >
                             {visibleSampleIds.includes(s.id) ? <CheckSquare size={12}/> : <Square size={12}/>} {s.name}
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
