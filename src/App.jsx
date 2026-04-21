@@ -320,24 +320,36 @@ export default function App() {
   }, [config.staticCount, config.angleThreshold, config.windowSize, config.autoFilter, config.dataColumnLetter, config.outlierSensitivity]);
 
   // --- 5. 汇总图表组件 ---
-  const SummaryChart = ({ isLarge = false }) => (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={filteredSummaryStats} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-        <XAxis dataKey="name" fontSize={isLarge ? 14 : 11} fontWeight="black" tickLine={false} axisLine={false} stroke="#94a3b8" />
-        <YAxis domain={[0, 'auto']} fontSize={isLarge ? 12 : 10} width={30} tickLine={false} axisLine={false} stroke="#94a3b8" />
-        <Tooltip formatter={(v) => [`${Number(v).toFixed(2)}°`, "角度"]} contentStyle={{borderRadius: '1.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', fontSize: isLarge ? '14px' : '11px', fontWeight: 'bold'}} cursor={{fill: '#f1f5f9', radius: 10}} />
-        <Legend iconType="circle" wrapperStyle={{paddingTop: '20px', fontSize: isLarge ? '14px' : '10px', fontWeight: 'bold'}} />
-        {summaryMetrics.sca && <Bar key="sum-sca" dataKey="scaAvg" name="静态角 SCA" fill={chartColors.sca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="scaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
-        {summaryMetrics.aca && <Bar key="sum-aca" dataKey="acaAvg" name="前进角 ACA" fill={chartColors.aca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="acaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
-        {summaryMetrics.rca && <Bar key="sum-rca" dataKey="rcaAvg" name="后退角 RCA" fill={chartColors.rca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="rcaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
-        {summaryMetrics.cah && <Bar key="sum-cah" dataKey="cahAvg" name="接触角滞后 CAH" fill={chartColors.cah} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="cahStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
-      </BarChart>
-    </ResponsiveContainer>
-  );
+  const SummaryChart = ({ isLarge = false }) => {
+    if (!filteredSummaryStats || filteredSummaryStats.length === 0) {
+      return (
+        <div className="h-full w-full flex flex-col items-center justify-center text-center">
+          <div className="bg-slate-100 p-4 rounded-xl mb-4"><BarChart3 size={24} className="text-slate-400" /></div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">暂无数据</p>
+          <p className="text-[9px] text-slate-300 font-bold mt-1">请导入样品并确保样品已勾选</p>
+        </div>
+      );
+    }
+    
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={filteredSummaryStats} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+          <XAxis dataKey="name" fontSize={isLarge ? 14 : 11} fontWeight="black" tickLine={false} axisLine={false} stroke="#94a3b8" />
+          <YAxis domain={[0, 'auto']} fontSize={isLarge ? 12 : 10} width={30} tickLine={false} axisLine={false} stroke="#94a3b8" />
+          <Tooltip formatter={(v) => [`${Number(v).toFixed(2)}°`, "角度"]} contentStyle={{borderRadius: '1.5rem', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', fontSize: isLarge ? '14px' : '11px', fontWeight: 'bold'}} cursor={{fill: '#f1f5f9', radius: 10}} />
+          <Legend iconType="circle" wrapperStyle={{paddingTop: '20px', fontSize: isLarge ? '14px' : '10px', fontWeight: 'bold'}} />
+          {summaryMetrics.sca && <Bar key="sum-sca" dataKey="scaAvg" name="静态角 SCA" fill={chartColors.sca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="scaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
+          {summaryMetrics.aca && <Bar key="sum-aca" dataKey="acaAvg" name="前进角 ACA" fill={chartColors.aca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="acaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
+          {summaryMetrics.rca && <Bar key="sum-rca" dataKey="rcaAvg" name="后退角 RCA" fill={chartColors.rca} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="rcaStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
+          {summaryMetrics.cah && <Bar key="sum-cah" dataKey="cahAvg" name="接触角滞后 CAH" fill={chartColors.cah} barSize={isLarge ? 40 : 20} radius={[6, 6, 0, 0]}><ErrorBar dataKey="cahStd" width={4} strokeWidth={2} stroke="#333" /></Bar>}
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-8">
+    <div className="min-h-screen bg-white text-slate-900 font-sans p-4 md:p-8">
       <datalist id="liquid-options">
         <option value="水 (Water)" /><option value="乙醇 (Ethanol)" /><option value="正十六烷 (n-Hexadecane)" />
       </datalist>
@@ -380,10 +392,13 @@ export default function App() {
         </div>
       )}
 
-      <header className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 print:hidden">
+      <header className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
         <div className="flex items-center gap-4">
           <div>
-            <h1 className="text-3xl font-black text-indigo-950 flex items-center gap-2 tracking-tighter uppercase"><Activity className="text-indigo-600" /> Contact Angle Master</h1>
+            <h1 className="text-3xl font-black text-indigo-600 flex items-center gap-2 tracking-tighter">
+              <Activity className="text-indigo-600" /> 
+              <span className="text-slate-900">CONTACT ANGLE MASTER</span>
+            </h1>
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Professional Wetting Metrology Engine</p>
           </div>
           <button onClick={() => setShowHelp(true)} className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 rounded-2xl transition-all shadow-sm group">
@@ -391,10 +406,10 @@ export default function App() {
           </button>
         </div>
         <div className="flex gap-3">
-            <button onClick={exportExcel} disabled={!samples.length} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition shadow-lg shadow-emerald-100 text-[10px] font-black uppercase flex items-center gap-2">
+            <button onClick={exportExcel} disabled={!samples.length} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl transition shadow-lg shadow-green-100 text-[10px] font-black uppercase flex items-center gap-2">
               <Download size={14} /> 导出 EXCEL 报表
             </button>
-            <label className={`flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl cursor-pointer transition shadow-lg shadow-indigo-200 ${!libLoaded && 'opacity-50'}`}>
+            <label className={`flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl cursor-pointer transition shadow-lg shadow-indigo-200 ${!libLoaded && 'opacity-50'}`}>
                 <Plus size={14} /> <span className="text-[10px] font-black uppercase">导入测量数据</span>
                 <input type="file" multiple accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} disabled={!libLoaded} />
             </label>
@@ -403,11 +418,11 @@ export default function App() {
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 space-y-6">
-          <section className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm max-h-[350px] overflow-hidden flex flex-col">
+          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-h-[350px] overflow-hidden flex flex-col">
             <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><FileText size={14}/> 样品队列 ({samples.length})</h2>
             <div className="space-y-2 overflow-y-auto pr-2 custom-scrollbar">
               {samples.map(s => (
-                <div key={s.id} onClick={() => setActiveSampleId(s.id)} className={`p-4 rounded-2xl border transition-all cursor-pointer flex justify-between items-center group ${activeSampleId === s.id ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-50' : 'bg-white border-slate-50 hover:border-slate-200'}`}>
+                <div key={s.id} onClick={() => setActiveSampleId(s.id)} className={`p-4 rounded-xl border transition-all cursor-pointer flex justify-between items-center group ${activeSampleId === s.id ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-100' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
                   <div className="min-w-0 font-black uppercase"><p className="text-xs truncate">{s.name}</p><p className="text-[9px] text-slate-400 italic mt-1">{s.liquid}</p></div>
                   <button onClick={(e) => {e.stopPropagation(); setSamples(prev => prev.filter(x => x.id !== s.id));}} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
                 </div>
@@ -416,26 +431,26 @@ export default function App() {
             </div>
           </section>
 
-          <section className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2"><Settings2 size={14} /> 算法与同步配置</h2>
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <LabelWithTooltip label="数据列标" tooltip="数值所在的Excel列（如H）。" />
                   <input type="text" value={config.dataColumnLetter} onChange={e => setConfig({...config, dataColumnLetter: e.target.value.toUpperCase()})} className="w-full bg-transparent border-0 text-center font-black text-sm uppercase focus:ring-0 outline-none" />
                 </div>
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <LabelWithTooltip label="静态点数" tooltip="强制前N个有效点定为SCA阶段。" />
                   <input type="number" min="0" value={config.staticCount} onChange={e => setConfig({...config, staticCount: Math.max(0, parseInt(e.target.value) || 0)})} className="w-full bg-transparent border-0 text-center font-black text-sm focus:ring-0 outline-none" />
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
                 <LabelWithTooltip label="判定窗口点数" tooltip="中位数判定窗口大小。建议 3-5。" />
                 <input type="number" min="1" value={config.windowSize} onChange={e => setConfig({...config, windowSize: Math.max(1, parseInt(e.target.value) || 1)})} className="w-full bg-transparent border-0 text-center font-black text-sm outline-none" />
               </div>
 
-              <div className="p-4 bg-indigo-50/30 rounded-2xl border border-indigo-100/50">
+              <div className="p-4 bg-indigo-50/30 rounded-xl border border-indigo-100/50">
                 <div className="flex justify-between items-center mb-2">
                   <LabelWithTooltip label="去噪容忍度" tooltip="调高此值允许大跳变。默认4.5x。" />
                   <span className="text-[10px] font-black text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-100">{config.outlierSensitivity.toFixed(1)}x</span>
@@ -443,7 +458,7 @@ export default function App() {
                 <input type="range" min="1.5" max="15.0" step="0.5" value={config.outlierSensitivity} onChange={e => setConfig({...config, outlierSensitivity: parseFloat(e.target.value)})} className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer" />
               </div>
 
-              <div className="p-5 bg-slate-50/80 rounded-[2rem] border border-slate-100 shadow-inner">
+              <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-100">
                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Download size={14}/> 报表导出设置</h3>
                  <div className="grid grid-cols-2 gap-2 mb-4">
                    {[{id:'sca',l:'SCA'},{id:'aca',l:'ACA'},{id:'rca',l:'RCA'},{id:'cah',l:'CAH'}].map(it => (
@@ -461,7 +476,7 @@ export default function App() {
                  </div>
               </div>
 
-              <div className="p-5 bg-slate-50 rounded-[2rem] border border-slate-100 shadow-inner">
+              <div className="p-5 bg-slate-50 rounded-xl border border-slate-100">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Palette size={14}/> 界面配色管理</h3>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {COLOR_PRESETS.map((p, i) => (
@@ -486,24 +501,24 @@ export default function App() {
         <div className="lg:col-span-8 space-y-6">
           {activeSample && activeStats ? (
             <>
-              <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-2 shadow-inner">
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Edit3 size={12}/> 样品显示名</label>
                   <input type="text" value={activeSample.name} onChange={e => setSamples(prev => prev.map(s => s.id === activeSample.id ? {...s, name: e.target.value} : s))} className="bg-transparent border-0 font-black text-slate-800 text-sm focus:ring-0 outline-none" />
                 </div>
-                <div className="p-4 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-2 shadow-inner">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Droplet size={12}/> 测试液体</label>
                   <input type="text" list="liquid-options" value={activeSample.liquid} onChange={e => setSamples(prev => prev.map(s => s.id === activeSample.id ? {...s, liquid: e.target.value} : s))} className="bg-transparent border-0 font-black text-slate-800 text-sm focus:ring-0 outline-none" />
                 </div>
               </div>
 
-              <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm relative">
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm relative">
                 <div className="flex justify-between items-center mb-8">
                   <div>
                     <h3 className="font-black text-slate-900 text-lg tracking-tighter uppercase">测量曲线分析</h3>
                     <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase"><MousePointer2 size={10} className="inline mr-1"/> 右键强制修正分段 | 自动屏蔽 0° 噪点</p>
                   </div>
-                  <div className="flex gap-4 text-[9px] font-black uppercase bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 shadow-inner">
+                  <div className="flex gap-4 text-[9px] font-black uppercase bg-slate-50 px-5 py-3 rounded-xl border border-slate-100">
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.sca}}></div> SCA</span>
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.aca}}></div> ACA</span>
                     <span className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: chartColors.rca}}></div> RCA</span>
@@ -554,7 +569,7 @@ export default function App() {
                   { id:'rca', label:'后退接触角 (RCA)', res:activeStats.rca, customColor:chartColors.rca, bg:'bg-orange-50' },
                   { id:'cah', label:'接触角滞后 (CAH)', res:activeStats.cah, customColor:chartColors.cah, bg:'bg-pink-50' }
                 ].map((item) => (
-                  <div key={`card-f-${item.id}`} className={`${item.bg} p-6 rounded-[2.5rem] border border-white shadow-sm relative overflow-hidden transition-all hover:scale-[1.03]`}>
+                  <div key={`card-f-${item.id}`} className={`${item.bg} p-6 rounded-xl border border-white shadow-sm relative overflow-hidden transition-all hover:scale-[1.03]`}>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 relative z-10">{item.label}</p>
                     <p className="text-2xl font-black relative z-10" style={{ color: item.customColor || undefined }}>{Number(item.res?.avg || 0).toFixed(config.exportPrecision)}°</p>
                     <div className="mt-2 flex justify-between items-center relative z-10 border-t border-white/50 pt-2 text-[9px] font-black text-slate-400 uppercase">
@@ -565,8 +580,8 @@ export default function App() {
                 ))}
               </div>
 
-              {stats.length > 1 && (
-                <div className="bg-white p-8 rounded-[3rem] border border-slate-100 shadow-sm overflow-hidden font-black">
+              {stats.length >= 1 && (
+                <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm overflow-hidden font-black">
                   <div className="flex flex-col gap-6 mb-8">
                     <div className="flex justify-between items-start">
                       <div className="flex items-center gap-2">
@@ -608,8 +623,8 @@ export default function App() {
               )}
             </>
           ) : (
-            <div className="bg-white p-16 rounded-[3rem] border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center">
-              <div className="bg-slate-100 p-6 rounded-3xl mb-6"><FileText size={32} className="text-slate-400" /></div>
+            <div className="bg-white p-16 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
+              <div className="bg-slate-100 p-6 rounded-xl mb-6"><FileText size={32} className="text-slate-400" /></div>
               <h3 className="text-lg font-black text-slate-900 uppercase mb-2">未选择样品</h3>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest max-w-md">请从左侧样品队列中选择一个样品，或点击右上角的「导入测量数据」按钮添加新样品。</p>
             </div>
