@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Upload, FileText, Trash2, X,
-  Settings2, BarChart3, Plus, Activity, Filter, HelpCircle, Edit3, Droplet, Download, Maximize2, CheckSquare, Square, MousePointer2, MoveHorizontal, ZoomIn, Palette, ShieldCheck, BookOpen, Layers, Type
+  Settings2, BarChart3, Plus, Activity, Filter, HelpCircle, Edit3, Droplet, Download, Maximize2, CheckSquare, Square, MousePointer2, ZoomIn, Palette, ShieldCheck, BookOpen, Layers, Type
 } from 'lucide-react';
 
 /**
@@ -111,6 +111,7 @@ export default function App() {
   const [showSummaryValues, setShowSummaryValues] = useState(false);
   const [isBrushMode, setIsBrushMode] = useState(false);
   const [selectedPointIndices, setSelectedPointIndices] = useState([]);
+  const [lineChartWidth, setLineChartWidth] = useState(1000);
 
   const [chartColors, setChartColors] = useState({ sca: '#6366f1', aca: '#10b981', rca: '#f59e0b', cah: '#ec4899' });
   const [viewZoom, setViewZoom] = useState(100); 
@@ -130,6 +131,11 @@ export default function App() {
     displayDensity: 1, 
     dataColumnLetter: 'H',
     outlierSensitivity: 4.5,
+    validAngleMin: 0,
+    validAngleMax: 180,
+    useRegionFilter: false,
+    keepRegionStart: 0,
+    keepRegionEnd: 9999,
     exportPrecision: 2,
     exportSelection: { sca: true, aca: true, rca: true, cah: true }
   });
@@ -137,6 +143,8 @@ export default function App() {
   // --- 核心算法逻辑 ---
   const runSegmentationPipeline = useCallback((points, currentConfig, overrides = {}, exclusions = []) => {
     if (!points || points.length === 0) return [];
+    const regionStart = Math.min(currentConfig.keepRegionStart, currentConfig.keepRegionEnd);
+    const regionEnd = Math.max(currentConfig.keepRegionStart, currentConfig.keepRegionEnd);
     const data = points.map((pt, i) => ({
       ...pt,
       index: pt.index || i,
@@ -144,6 +152,8 @@ export default function App() {
       isExcluded: exclusions.includes(pt.index || i),
       active: pt.value > 1.0 && !exclusions.includes(pt.index || i),
       isOutlier: false,
+      forcedNoise: (pt.value < currentConfig.validAngleMin || pt.value > currentConfig.validAngleMax) ||
+        (currentConfig.useRegionFilter && ((pt.index || i) < regionStart || (pt.index || i) > regionEnd)),
       isManual: !!overrides[pt.index || i]
     }));
 
@@ -204,6 +214,9 @@ export default function App() {
         segmented.forEach(d => { if(d.type === t && d.active && !d.isManual) d.isOutlier = (d.value < lb || d.value > ub); });
       });
     }
+    segmented.forEach(d => {
+      if (d.forcedNoise) d.isOutlier = true;
+    });
     return segmented;
   }, []);
 
@@ -261,15 +274,6 @@ export default function App() {
     return sliced.filter((_, i) => i % config.displayDensity === 0);
   }, [activeSample, viewZoom, viewOffset, config.displayDensity]);
 
-  const chartYBounds = useMemo(() => {
-    if (!windowedData.length) return { min: 0, max: 1 };
-    const values = windowedData.map(d => d.value);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    if (min === max) return { min: min - 1, max: max + 1 };
-    return { min, max };
-  }, [windowedData]);
-
   // --- 事件处理 ---
   const handleFileUpload = useCallback(async (e) => {
     if (!libLoaded || !window.XLSX) return;
@@ -292,7 +296,8 @@ export default function App() {
           setSamples(prev => [...prev, { id: newId, name: file.name.split('.')[0], data: finalData, liquid: '水 (Water)', overrides: {}, exclusions: [] }]);
           setVisibleSampleIds(prev => [...prev, newId]);
           setActiveSampleId(newId);
-          setViewZoom(100); setViewOffset(0);
+          setViewZoom(100);
+          setViewOffset(0);
         } catch (err) { console.error(err); }
       };
       reader.readAsBinaryString(file);
@@ -370,7 +375,7 @@ export default function App() {
       const rawPts = s.data.map(d => ({ index: d.index, value: d.value }));
       return { ...s, data: runSegmentationPipeline(rawPts, config, s.overrides, s.exclusions) };
     }));
-  }, [config.staticCount, config.angleThreshold, config.windowSize, config.autoFilter, config.dataColumnLetter, config.outlierSensitivity]);
+  }, [config.staticCount, config.angleThreshold, config.windowSize, config.autoFilter, config.dataColumnLetter, config.outlierSensitivity, config.validAngleMin, config.validAngleMax, config.useRegionFilter, config.keepRegionStart, config.keepRegionEnd]);
 
   useEffect(() => {
     const sampleIds = samples.map(s => s.id);
@@ -387,11 +392,21 @@ export default function App() {
     if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
   }, [activeSampleId, config.displayDensity, isBrushMode]);
 
+  useEffect(() => {
+    const updateWidth = () => {
+      const next = Math.floor(lineChartAreaRef.current?.clientWidth || 0);
+      if (next > 0) setLineChartWidth(next);
+    };
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
 
 
   // --- 5. 汇总图表组件 ---
   const SummaryChart = ({ isLarge = false }) => {
-    const summaryChartRef = React.useRef(null);
+    const summaryChartWidth = Math.max(500, filteredSummaryStats.length * 140 + 220);
     if (!filteredSummaryStats || filteredSummaryStats.length === 0) {
       return (
         <div className="h-full w-full flex flex-col items-center justify-center text-center">
@@ -403,8 +418,8 @@ export default function App() {
     }
     
     return (
-      <div ref={summaryChartRef} className="w-full h-full">
-        <BarChart data={filteredSummaryStats} width={Math.max(320, summaryChartRef.current?.clientWidth || 800)} height={isLarge ? 520 : 300} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+      <div className="w-full h-full overflow-x-auto overflow-y-hidden">
+        <BarChart data={filteredSummaryStats} width={summaryChartWidth} height={isLarge ? 520 : 300} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
           <XAxis dataKey="name" fontSize={isLarge ? 14 : 11} fontWeight="black" tickLine={false} axisLine={false} stroke="#94a3b8" />
           <YAxis domain={[0, 'auto']} fontSize={isLarge ? 12 : 10} width={30} tickLine={false} axisLine={false} stroke="#94a3b8" />
@@ -439,7 +454,7 @@ export default function App() {
     );
   };
 
-  const resolvedLineChartWidth = Math.max(320, (lineChartAreaRef.current?.clientWidth || 800));
+  const resolvedLineChartWidth = Math.max(320, lineChartWidth);
 
   const handleSummaryChipDrop = useCallback((targetId) => {
     if (!draggingSampleId || draggingSampleId === targetId) return;
@@ -455,6 +470,9 @@ export default function App() {
     });
     setDraggingSampleId(null);
   }, [draggingSampleId]);
+
+  const summaryChartNormal = useMemo(() => <SummaryChart isLarge={false} />, [filteredSummaryStats, summaryMetrics, chartColors, showSummaryValues, config.exportPrecision]);
+  const summaryChartLarge = useMemo(() => <SummaryChart isLarge={true} />, [filteredSummaryStats, summaryMetrics, chartColors, showSummaryValues, config.exportPrecision]);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans p-4 md:p-8">
@@ -486,7 +504,7 @@ export default function App() {
         <div className="fixed inset-0 z-[1000] bg-slate-950/95 backdrop-blur-xl p-8 flex flex-col">
           <div className="flex justify-between items-center mb-8 text-white text-2xl font-black uppercase">汇总对比视图<button onClick={() => setIsFullscreenChart(false)} className="bg-white/10 hover:bg-red-500 p-3 rounded-2xl shadow-xl"><X size={24}/></button></div>
           <div className="flex-1 w-full bg-white rounded-[3.5rem] p-12 shadow-2xl overflow-hidden min-h-[400px]">
-            <SummaryChart isLarge={true} />
+            {summaryChartLarge}
           </div>
         </div>
       )}
@@ -564,6 +582,27 @@ export default function App() {
                   <span className="text-[10px] font-black text-indigo-600 bg-white px-2 py-0.5 rounded-full border border-indigo-100">{config.outlierSensitivity.toFixed(1)}x</span>
                 </div>
                 <input type="range" min="1.5" max="15.0" step="0.5" value={config.outlierSensitivity} onChange={e => setConfig({...config, outlierSensitivity: parseFloat(e.target.value)})} className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none accent-indigo-600 cursor-pointer" />
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                <LabelWithTooltip label="强制噪点角度范围" tooltip="小于最小角度或大于最大角度的点会直接视为噪点。" />
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="number" value={config.validAngleMin} onChange={e => setConfig({...config, validAngleMin: Number(e.target.value)})} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black outline-none" placeholder="最小角度" />
+                  <input type="number" value={config.validAngleMax} onChange={e => setConfig({...config, validAngleMax: Number(e.target.value)})} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black outline-none" placeholder="最大角度" />
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <LabelWithTooltip label="区域外强制噪点" tooltip="开启后，仅保留指定点位区间，区间外全部视为噪点。" />
+                  <button onClick={() => setConfig({...config, useRegionFilter: !config.useRegionFilter})} className={`px-3 py-1 rounded-lg text-[10px] font-black border ${config.useRegionFilter ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200'}`}>
+                    {config.useRegionFilter ? '已开启' : '已关闭'}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="number" min="0" value={config.keepRegionStart} onChange={e => setConfig({...config, keepRegionStart: Math.max(0, parseInt(e.target.value) || 0)})} disabled={!config.useRegionFilter} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black outline-none disabled:opacity-40" placeholder="保留起点" />
+                  <input type="number" min="0" value={config.keepRegionEnd} onChange={e => setConfig({...config, keepRegionEnd: Math.max(0, parseInt(e.target.value) || 0)})} disabled={!config.useRegionFilter} className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-black outline-none disabled:opacity-40" placeholder="保留终点" />
+                </div>
               </div>
 
               <div className="p-5 bg-slate-50/80 rounded-xl border border-slate-100">
@@ -650,7 +689,7 @@ export default function App() {
                     <button onClick={() => { setSelectedPointIndices([]); brushDraftRef.current = null; if (brushBoxRef.current) brushBoxRef.current.style.display = 'none'; }} disabled={!selectedPointIndices.length} className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-white text-slate-500 border border-slate-200 disabled:opacity-40">清空选择</button>
                   </div>
                 )}
-                <div ref={lineChartAreaRef} className="h-[400px] w-full mb-8 relative" style={{ minWidth: 0, minHeight: 400, cursor: 'crosshair' }}>
+                <div ref={lineChartAreaRef} className="h-[400px] w-full mb-8 relative overflow-hidden" style={{ minWidth: 0, minHeight: 400, cursor: 'crosshair' }}>
                   <LineChart
                     width={resolvedLineChartWidth}
                     height={400}
@@ -695,7 +734,7 @@ export default function App() {
                         if (payload.type === 'RCA') fill = chartColors.rca;
                         if (!payload.active || payload.isZero || (config.autoFilter && payload.isOutlier)) fill = "#f87171";
                         const isSelected = selectedPointIndices.includes(payload.index);
-                        return (<circle key={`pt-${payload.index}`} cx={cx} cy={cy} r={isSelected ? 6 : (payload.isManual ? 5 : 3.5)} fill={fill} stroke={isSelected ? "#111827" : (payload.isManual ? "#000" : "#fff")} strokeWidth={isSelected ? 2.5 : (payload.isManual ? 2 : 0.5)} style={{ pointerEvents: 'none' }} />);
+                        return (<circle key={`pt-${payload.index}`} data-point-index={payload.index} cx={cx} cy={cy} r={isSelected ? 6 : (payload.isManual ? 5 : 3.5)} fill={fill} stroke={isSelected ? "#111827" : (payload.isManual ? "#000" : "#fff")} strokeWidth={isSelected ? 2.5 : (payload.isManual ? 2 : 0.5)} style={{ pointerEvents: 'none' }} />);
                       }} 
                     />
                   </LineChart>
@@ -707,6 +746,7 @@ export default function App() {
                         const rect = e.currentTarget.getBoundingClientRect();
                         const x = e.clientX - rect.left;
                         const y = e.clientY - rect.top;
+                        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
                         brushDraftRef.current = { startX: x, startY: y, endX: x, endY: y, additive: e.ctrlKey || e.metaKey };
                         if (brushBoxRef.current) {
                           brushBoxRef.current.style.display = 'block';
@@ -720,13 +760,17 @@ export default function App() {
                         const draft = brushDraftRef.current;
                         if (!draft) return;
                         const rect = e.currentTarget.getBoundingClientRect();
-                        draft.endX = e.clientX - rect.left;
-                        draft.endY = e.clientY - rect.top;
+                        const nextX = e.clientX - rect.left;
+                        const nextY = e.clientY - rect.top;
+                        if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) return;
+                        draft.endX = nextX;
+                        draft.endY = nextY;
                         if (brushBoxRef.current) {
                           const left = Math.min(draft.startX, draft.endX);
                           const top = Math.min(draft.startY, draft.endY);
                           const width = Math.abs(draft.endX - draft.startX);
                           const height = Math.abs(draft.endY - draft.startY);
+                          if (![left, top, width, height].every(Number.isFinite)) return;
                           brushBoxRef.current.style.left = `${left}px`;
                           brushBoxRef.current.style.top = `${top}px`;
                           brushBoxRef.current.style.width = `${width}px`;
@@ -740,28 +784,23 @@ export default function App() {
                         const right = Math.max(draft.startX, draft.endX);
                         const top = Math.min(draft.startY, draft.endY);
                         const bottom = Math.max(draft.startY, draft.endY);
-                        const chartWidth = chartContainerRef.current?.clientWidth || 1;
-                        const chartHeight = 400;
-                        const pxLeft = 42;
-                        const pxRight = chartWidth - 22;
-                        const pxTop = 16;
-                        const pxBottom = chartHeight - 22;
-                        const xRange = pxRight - pxLeft;
-                        const yRange = pxBottom - pxTop;
-                        if (xRange <= 0 || yRange <= 0 || !windowedData.length) {
+                        if (!lineChartAreaRef.current || !windowedData.length) {
                           brushDraftRef.current = null;
                           if (brushBoxRef.current) brushBoxRef.current.style.display = 'none';
                           return;
                         }
-                        const minVal = chartYBounds.min;
-                        const maxVal = chartYBounds.max;
-                        const nextSelected = windowedData.filter((d, i) => {
-                          const ratioX = windowedData.length <= 1 ? 0 : (i / (windowedData.length - 1));
-                          const pxX = pxLeft + ratioX * xRange;
-                          const ratioY = (d.value - minVal) / (maxVal - minVal);
-                          const pxY = pxBottom - ratioY * yRange;
-                          return pxX >= left && pxX <= right && pxY >= top && pxY <= bottom;
-                        }).map(d => d.index);
+                        const containerRect = lineChartAreaRef.current.getBoundingClientRect();
+                        const nextSelected = Array.from(lineChartAreaRef.current.querySelectorAll('circle[data-point-index]'))
+                          .map((el) => {
+                            const r = el.getBoundingClientRect();
+                            return {
+                              index: Number(el.getAttribute('data-point-index')),
+                              x: r.left + r.width / 2 - containerRect.left,
+                              y: r.top + r.height / 2 - containerRect.top
+                            };
+                          })
+                          .filter((pt) => Number.isFinite(pt.index) && pt.x >= left && pt.x <= right && pt.y >= top && pt.y <= bottom)
+                          .map((pt) => pt.index);
                         setSelectedPointIndices(prev => {
                           if (!draft.additive) return nextSelected;
                           return Array.from(new Set([...prev, ...nextSelected]));
@@ -778,7 +817,18 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <div className="space-y-5 pt-8 border-t border-slate-50"><div className="flex items-center gap-6"><div className="w-24 shrink-0 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest"><ZoomIn size={14}/> 范围缩放</div><input type="range" min="1" max="100" value={viewZoom} onChange={e => setViewZoom(parseInt(e.target.value))} className="flex-1 h-1 bg-slate-100 rounded-lg appearance-none accent-indigo-600" /><span className="w-12 text-right font-black text-xs text-indigo-600">{viewZoom}%</span></div><div className="flex items-center gap-6"><div className="w-24 shrink-0 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest"><MoveHorizontal size={14}/> 视窗平移</div><input type="range" min="0" max="100" value={viewOffset} onChange={e => setViewOffset(parseInt(e.target.value))} className="flex-1 h-1 bg-slate-100 rounded-lg appearance-none accent-slate-400" /><span className="w-12 text-right font-black text-xs text-slate-400">{viewOffset}%</span></div></div>
+                <div className="space-y-5 pt-8 border-t border-slate-50">
+                  <div className="flex items-center gap-6">
+                    <div className="w-24 shrink-0 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest"><ZoomIn size={14}/> 范围缩放</div>
+                    <input type="range" min="1" max="100" value={viewZoom} onChange={e => setViewZoom(parseInt(e.target.value))} className="flex-1 h-1 bg-slate-100 rounded-lg appearance-none accent-indigo-600" />
+                    <span className="w-12 text-right font-black text-xs text-indigo-600">{viewZoom}%</span>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="w-24 shrink-0 flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">视窗平移</div>
+                    <input type="range" min="0" max="100" value={viewOffset} onChange={e => setViewOffset(parseInt(e.target.value))} className="flex-1 h-1 bg-slate-100 rounded-lg appearance-none accent-slate-400" />
+                    <span className="w-12 text-right font-black text-xs text-slate-500">{viewOffset}%</span>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -862,7 +912,7 @@ export default function App() {
                     </div>
                   </div>
                   <div className="h-[300px] w-full">
-                    <SummaryChart />
+                    {summaryChartNormal}
                   </div>
                 </div>
               )}
